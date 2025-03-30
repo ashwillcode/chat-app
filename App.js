@@ -21,14 +21,13 @@ import Start from './components/Start';
 import Chat from './components/Chat';
 
 // Firebase configuration
-// IMPORTANT: Replace with your Firebase project configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyCUhnzbRX3JNUtDkjdAf3CSBoG4aemXVS4",
-  authDomain: "chat-app-d6e05.firebaseapp.com",
-  projectId: "chat-app-d6e05",
-  storageBucket: "chat-app-d6e05.firebasestorage.app",
-  messagingSenderId: "1029431683750",
-  appId: "1:1029431683750:web:821f6b939a093d8f6e6267"
+  apiKey: process.env.FIREBASE_API_KEY,
+  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.FIREBASE_PROJECT_ID,
+  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.FIREBASE_APP_ID
 };
 
 // Initialize Firebase services

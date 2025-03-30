@@ -47,7 +47,16 @@ npm install
    - Create a new Firebase project at [Firebase Console](https://console.firebase.google.com)
    - Enable Anonymous Authentication in Firebase Authentication
    - Create a Firestore database
-   - Add your Firebase configuration to `App.js`
+   - Create a `.env` file in the root directory with your Firebase configuration:
+     ```
+     FIREBASE_API_KEY=your_api_key
+     FIREBASE_AUTH_DOMAIN=your_auth_domain
+     FIREBASE_PROJECT_ID=your_project_id
+     FIREBASE_STORAGE_BUCKET=your_storage_bucket
+     FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
+     FIREBASE_APP_ID=your_app_id
+     ```
+   - Never commit the `.env` file to version control
 
 4. Start the development server:
 ```bash
