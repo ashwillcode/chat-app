@@ -1,21 +1,58 @@
+/**
+ * Start Screen Component
+ * 
+ * This component serves as the entry point for users, handling:
+ * 1. User name input
+ * 2. Chat background color selection
+ * 3. Anonymous authentication with Firebase
+ * 4. Navigation to the chat screen with user context
+ */
+
 import { useState } from 'react';
-import { StyleSheet, Text, View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ImageBackground } from 'react-native';
+import { StyleSheet, Text, View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ImageBackground, Alert } from 'react-native';
 import Icon from '@expo/vector-icons/FontAwesome';
+import { getAuth, signInAnonymously } from 'firebase/auth';
 
 /**
  * Start Screen Component
- * The initial screen of the chat app that users see when they open the application
- * Allows users to enter their name and choose a background color for the chat screen
  * @param {object} navigation - Navigation object provided by React Navigation
  * @returns {React.Component} A React component that renders the start screen
  */
 const Start = ({ navigation }) => {
-  // State for user's name and selected background color
+  // State management for user inputs and UI
   const [name, setName] = useState('');
   const [selectedColor, setSelectedColor] = useState('#090C08');
+  const [isLoading, setIsLoading] = useState(false);
 
-  // Background color options for chat screen
+  // Available background color options for chat screen
   const colors = ['#090C08', '#474056', '#8A95A5', '#B9C6AE'];
+
+  /**
+   * Handles user authentication and navigation to chat
+   * 1. Attempts anonymous sign-in with Firebase
+   * 2. On success, navigates to Chat screen with user context
+   * 3. On failure, shows error alert
+   */
+  const handleStartChat = async () => {
+    setIsLoading(true);
+    try {
+      // Authenticate anonymously with Firebase
+      const auth = getAuth();
+      const userCredential = await signInAnonymously(auth);
+      
+      // Navigate to Chat screen with user context
+      navigation.navigate('Chat', { 
+        userID: userCredential.user.uid,
+        name: name,
+        backgroundColor: selectedColor
+      });
+    } catch (error) {
+      console.error("Authentication error:", error);
+      Alert.alert("Error", "Failed to authenticate. Please try again.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <ImageBackground
@@ -31,7 +68,7 @@ const Start = ({ navigation }) => {
 
         {/* User Input Section */}
         <View style={styles.whiteBox}>
-          {/* Name Input Field */}
+          {/* Name Input Field with Icon */}
           <View style={styles.inputWrapper}>
             <View style={styles.iconContainer}>
               <Icon name="user" size={20} color="#757083" />
@@ -69,17 +106,15 @@ const Start = ({ navigation }) => {
 
           {/* Start Chat Button */}
           <TouchableOpacity 
-            style={[styles.button, !name && styles.buttonDisabled]}
-            disabled={!name}
-            onPress={() => {
-              navigation.navigate('Chat', { 
-                name: name,
-                backgroundColor: selectedColor
-              });
-            }}
+            style={[
+              styles.button, 
+              (!name || isLoading) && styles.buttonDisabled
+            ]}
+            disabled={!name || isLoading}
+            onPress={handleStartChat}
           >
             <Text style={styles.buttonText}>
-              Start Chatting
+              {isLoading ? 'Connecting...' : 'Start Chatting'}
             </Text>
           </TouchableOpacity>
         </View>

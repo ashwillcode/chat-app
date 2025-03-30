@@ -1,9 +1,22 @@
+/**
+ * Chat Screen Component
+ * 
+ * This component implements the main chat functionality:
+ * 1. Real-time message synchronization with Firestore
+ * 2. Message sending and receiving
+ * 3. Image sharing capabilities
+ * 4. Message reactions
+ * 5. Typing indicators
+ * 6. Pull-to-refresh functionality
+ */
+
 import { StyleSheet, View, Platform, KeyboardAvoidingView, FlatList, TextInput, TouchableOpacity, Text, Image, Pressable, Alert, Clipboard, ActivityIndicator, Modal, Animated } from 'react-native';
 import { useState, useRef, useEffect } from 'react';
 import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
 
-// Define available reactions for messages
+// Available reactions for messages
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
 
 // Define auto-reply messages for the chatbot
@@ -18,72 +31,92 @@ const AUTO_REPLIES = [
 
 /**
  * Chat Screen Component
- * The main chat interface where users can send and receive messages
- * @param {object} route - Contains route params including name and backgroundColor
- * @returns {React.Component} A React component that renders the chat screen
+ * @param {object} route - Contains route params including name, userID, and backgroundColor
+ * @param {object} db - Firestore database instance
+ * @returns {React.Component} A React component that renders the chat interface
  */
-const Chat = ({ route }) => {
-  // Extract background color and name from navigation params
-  const { backgroundColor, name } = route.params;
+const Chat = ({ route, db }) => {
+  // Extract user information and preferences from route params
+  const { backgroundColor, name: userName, userID } = route.params;
   
-  // Create a user object with required fields
-  const user = {
-    _id: 2,
-    name: name,
-    avatar: null
-  };
-
-  // State management
+  // State management for chat functionality
   const [messages, setMessages] = useState([]); // Store chat messages
   const [inputText, setInputText] = useState(''); // Store input field text
   const [isTyping, setIsTyping] = useState(false); // Track typing indicator
   const [isRefreshing, setIsRefreshing] = useState(false); // Track pull-to-refresh
   const [showReactions, setShowReactions] = useState(null); // Track reaction picker visibility
   
+  // Create user object for message attribution
+  const user = {
+    _id: userID,
+    name: userName,
+    avatar: null
+  };
+
   // Animation refs for typing indicator
   const typingTimeoutRef = useRef(null);
   const dot1Opacity = useRef(new Animated.Value(0.3)).current;
   const dot2Opacity = useRef(new Animated.Value(0.3)).current;
   const dot3Opacity = useRef(new Animated.Value(0.3)).current;
+  const flatListRef = useRef(null);
 
-  // Initialize chat with welcome messages
+  /**
+   * Setup effect for initializing chat requirements
+   * - Requests media permissions
+   * - Sets up Firestore listener
+   * Returns cleanup function for listeners
+   */
   useEffect(() => {
-    const systemMessage = {
-      _id: 1,
-      text: `Welcome ${name}! You've entered the chat.`,
-      createdAt: new Date(),
-      system: true
-    };
-
-    const botMessage = {
-      _id: 2,
-      text: 'Hello! How can I help you today?',
-      createdAt: new Date(Date.now() + 1000),
-      user: {
-        _id: 1,
-        name: 'Chat Bot',
-        avatar: null
-      },
-      status: 'read'
-    };
-
-    setMessages([botMessage, systemMessage]);
-  }, [name]);
-
-  // Request media library permissions on mount
-  useEffect(() => {
-    (async () => {
+    // Request media permissions
+    const requestPermissions = async () => {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
         Alert.alert('Sorry, we need camera roll permissions to share images!');
       }
-    })();
-  }, []);
+    };
+    requestPermissions();
 
-  // Animate typing indicator dots
+    // Set up Firestore listener
+    const q = query(
+      collection(db, 'messages'),
+      orderBy('createdAt', 'desc')
+    );
+    
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const newMessages = snapshot.docs.map(doc => {
+        const data = doc.data();
+        const createdAt = data.createdAt ? new Date(data.createdAt.toMillis()) : new Date();
+        
+        return {
+          _id: doc.id,
+          text: data.text,
+          createdAt,
+          user: data.user,
+          image: data.image,
+          reactions: data.reactions || [],
+          status: data.status || 'sent'
+        };
+      });
+      setMessages(newMessages);
+      
+      // Auto-scroll to latest message
+      if (flatListRef.current && newMessages.length > 0) {
+        flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+      }
+    });
+
+    // Cleanup subscription on unmount
+    return () => {
+      if (unsubscribe) unsubscribe();
+    };
+  }, [db]);
+
+  /**
+   * Animation effect for typing indicator
+   * Creates a loop animation sequence for three dots
+   */
   useEffect(() => {
     if (isTyping) {
-      // Create a loop animation sequence for the three dots
       Animated.loop(
         Animated.sequence([
           // Animate first dot
@@ -130,22 +163,25 @@ const Chat = ({ route }) => {
     }
   }, [isTyping]);
 
-  // Handle typing indicator timeout
+  /**
+   * Handle typing indicator timeout
+   * Shows typing indicator while user is entering text
+   * @param {string} text - The current input text
+   */
   const handleTyping = (text) => {
     setInputText(text);
-    
-    // Clear existing timeout
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
-    
-    // Set new timeout to hide typing indicator
     typingTimeoutRef.current = setTimeout(() => {
       setIsTyping(false);
     }, 1500);
   };
 
-  // Handle image picking from gallery
+  /**
+   * Handle image picking from gallery
+   * Allows users to select and send images
+   */
   const pickImage = async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ['image'],
@@ -170,15 +206,21 @@ const Chat = ({ route }) => {
     }
   };
 
-  // Handle pull-to-refresh
+  /**
+   * Handle pull-to-refresh functionality
+   * Simulates refresh with a delay
+   */
   const onRefresh = async () => {
     setIsRefreshing(true);
-    // Simulate refresh delay
     await new Promise(resolve => setTimeout(resolve, 1000));
     setIsRefreshing(false);
   };
 
-  // Add reaction to a message
+  /**
+   * Add reaction to a message
+   * @param {string} messageId - ID of the message to react to
+   * @param {string} reaction - The reaction emoji to add
+   */
   const addReaction = (messageId, reaction) => {
     setMessages(prevMessages =>
       prevMessages.map(msg =>
@@ -193,69 +235,34 @@ const Chat = ({ route }) => {
     setShowReactions(null);
   };
 
-  // Handle sending messages
-  const onSend = () => {
+  /**
+   * Handle sending messages
+   * Adds new message to Firestore with proper formatting
+   */
+  const onSend = async () => {
     if (!inputText.trim()) return;
 
-    // Create new user message
-    const newMessage = {
-      _id: Date.now(),
-      text: inputText.trim(),
-      createdAt: new Date(),
-      user: {
-        _id: 2,
-        name: user.name,
-        avatar: user.avatar
-      },
-      status: 'sent'
-    };
+    try {
+      const newMessage = {
+        text: inputText.trim(),
+        createdAt: serverTimestamp(),
+        user: {
+          _id: user._id,
+          name: user.name,
+          avatar: user.avatar
+        },
+        status: 'sent'
+      };
 
-    setMessages(previousMessages => [newMessage, ...previousMessages]);
-    setInputText('');
-
-    // Simulate message delivery status updates
-    setTimeout(() => {
-      setMessages(previousMessages => 
-        previousMessages.map(msg => 
-          msg._id === newMessage._id 
-            ? { ...msg, status: 'delivered' }
-            : msg
-        )
-      );
-
-      // Simulate message being read
-      setTimeout(() => {
-        setMessages(previousMessages => 
-          previousMessages.map(msg => 
-            msg._id === newMessage._id 
-              ? { ...msg, status: 'read' }
-              : msg
-          )
-        );
-
-        // Show bot typing indicator
-        setIsTyping(true);
-        
-        // Send auto-reply after delay
-        setTimeout(() => {
-          const autoReply = {
-            _id: Date.now() + 1000,
-            text: AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)],
-            createdAt: new Date(),
-            user: {
-              _id: 1,
-              name: 'Chat Bot',
-              avatar: null
-            },
-            status: 'read'
-          };
-
-          setIsTyping(false);
-          setMessages(prevMessages => [autoReply, ...prevMessages]);
-        }, 2000);
-
-      }, 1000);
-    }, 1000);
+      // Add document to Firestore
+      await addDoc(collection(db, 'messages'), newMessage);
+      
+      setInputText('');
+      setIsTyping(false);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
+    }
   };
 
   // Format date for message headers
@@ -417,6 +424,7 @@ const Chat = ({ route }) => {
       >
         {/* Message List */}
         <FlatList
+          ref={flatListRef}
           data={messages}
           renderItem={renderMessage}
           keyExtractor={item => item._id.toString()}
@@ -425,6 +433,11 @@ const Chat = ({ route }) => {
           contentContainerStyle={{ flexGrow: 1 }}
           onRefresh={onRefresh}
           refreshing={isRefreshing}
+          onContentSizeChange={() => {
+            if (flatListRef.current && messages.length > 0) {
+              flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+            }
+          }}
         />
 
         {/* Typing Indicator */}

@@ -1,19 +1,33 @@
 # Chat App
 
-A real-time chat application built with Expo and React Native.
+A real-time chat application built with Expo, React Native, and Firebase.
 
 ## Features
 
+- Anonymous user authentication via Firebase
+- Real-time messaging with Firestore
 - User customization with name and background color selection
-- Smooth navigation between screens
+- Message timestamps and delivery status
 - Modern, clean UI design
-- Real-time messaging capabilities (coming soon)
+- Image sharing capabilities
+- Message reactions
+- Pull-to-refresh functionality
+
+## Implementation Note
+
+This app uses a custom chat implementation instead of the popular `react-native-gifted-chat` library. This decision was made to:
+- Maintain full control over the UI/UX
+- Avoid compatibility issues with newer React Native versions
+- Implement custom features like message reactions and typing indicators
+- Provide better performance with direct Firestore integration
+- Enable easier customization of message bubbles and animations
 
 ## Prerequisites
 
 - Node.js (v14 or higher)
 - npm or yarn
 - Expo CLI
+- Firebase account and project
 - iOS Simulator (for Mac) or Android Studio (for Android development)
 
 ## Installation
@@ -29,7 +43,13 @@ cd chat-app
 npm install
 ```
 
-3. Start the development server:
+3. Set up Firebase:
+   - Create a new Firebase project at [Firebase Console](https://console.firebase.google.com)
+   - Enable Anonymous Authentication in Firebase Authentication
+   - Create a Firestore database
+   - Add your Firebase configuration to `App.js`
+
+4. Start the development server:
 ```bash
 npx expo start
 ```
@@ -38,20 +58,55 @@ npx expo start
 
 ```
 chat-app/
-├── App.js                 # Main application component with navigation setup
+├── App.js                 # Main application component with Firebase and navigation setup
 ├── components/           
-│   ├── Start.js          # Welcome screen with user setup
-│   └── Chat.js           # Main chat interface
+│   ├── Start.js          # Welcome screen with user authentication
+│   └── Chat.js           # Real-time chat interface with Firestore integration
 ├── assets/               # Images and other static assets
 └── package.json          # Project dependencies and scripts
 ```
 
-## Navigation
+## Firebase Integration
 
-The app uses React Navigation with a native stack navigator:
+### Authentication
+- Anonymous authentication using Firebase Auth
+- User ID and display name management
+- Clean session handling
 
-- **Start Screen**: Initial screen where users enter their name and select a background color
-- **Chat Screen**: Main chat interface that displays the user's selected background color and name in the header
+### Firestore Database
+- Real-time message synchronization
+- Message structure:
+  ```javascript
+  {
+    text: string,
+    createdAt: timestamp,
+    user: {
+      _id: string,
+      name: string,
+      avatar: string | null
+    },
+    status: string,
+    image?: string,
+    reactions?: Array
+  }
+  ```
+
+## Features Implementation
+
+### Start Screen (`Start.js`)
+- User name input
+- Background color selection
+- Anonymous authentication
+- Navigation to chat with user context
+
+### Chat Screen (`Chat.js`)
+- Real-time message updates using Firestore listeners
+- Message sending with proper timestamps
+- Image sharing functionality
+- Message reactions
+- Typing indicators
+- Pull-to-refresh capability
+- Clean listener cleanup on unmount
 
 ## Development
 
@@ -60,12 +115,21 @@ The app uses React Navigation with a native stack navigator:
 1. Create new components in the `components/` directory
 2. Update navigation in `App.js` if adding new screens
 3. Follow the existing component structure and styling patterns
+4. Ensure proper Firebase security rules are in place
 
-### Styling Guidelines
+### Firebase Security Rules
 
-- Use the provided color palette for consistency
-- Follow the established component structure
-- Maintain responsive design principles
+Basic security rules for Firestore:
+```javascript
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /messages/{messageId} {
+      allow read, write: if request.auth != null;
+    }
+  }
+}
+```
 
 ## Contributing
 
@@ -78,3 +142,14 @@ The app uses React Navigation with a native stack navigator:
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Dependencies
+
+- expo
+- react-native
+- @react-navigation/native
+- @react-navigation/native-stack
+- firebase (v10.3.1)
+- expo-image-picker
+- react-native-safe-area-context
+- react-native-screens
