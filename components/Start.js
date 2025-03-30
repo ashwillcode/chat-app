@@ -14,7 +14,7 @@ const Start = ({ navigation }) => {
   const [name, setName] = useState('');
   const [selectedColor, setSelectedColor] = useState('#090C08');
 
-  // Background color options
+  // Background color options for chat screen
   const colors = ['#090C08', '#474056', '#8A95A5', '#B9C6AE'];
 
   return (
@@ -24,11 +24,14 @@ const Start = ({ navigation }) => {
       style={styles.container}
     >
       <View style={styles.contentContainer}>
+        {/* App Title */}
         <View style={styles.titleContainer}>
           <Text style={styles.title}>Chat</Text>
         </View>
+
+        {/* User Input Section */}
         <View style={styles.whiteBox}>
-          {/* Input field for user's name */}
+          {/* Name Input Field */}
           <View style={styles.inputWrapper}>
             <View style={styles.iconContainer}>
               <Icon name="user" size={20} color="#757083" />
@@ -42,9 +45,8 @@ const Start = ({ navigation }) => {
             />
           </View>
 
-          {/* Color picker section */}
+          {/* Color Picker Section */}
           <Text style={styles.colorPickerText}>Choose Background Color:</Text>
-          
           <View style={styles.colorPicker}>
             {colors.map((color) => (
               <TouchableOpacity
@@ -65,7 +67,7 @@ const Start = ({ navigation }) => {
             ))}
           </View>
 
-          {/* Button to enter chat */}
+          {/* Start Chat Button */}
           <TouchableOpacity 
             style={[styles.button, !name && styles.buttonDisabled]}
             disabled={!name}
@@ -88,6 +90,7 @@ const Start = ({ navigation }) => {
 
 // Styles for the Start screen component
 const styles = StyleSheet.create({
+  // Container styles
   container: {
     flex: 1,
   },
@@ -97,6 +100,8 @@ const styles = StyleSheet.create({
     paddingBottom: '15%', // Add some padding at the bottom
     justifyContent: 'space-between', // This will push the white box to the bottom
   },
+
+  // Title styles
   titleContainer: {
     marginTop: '35%', // Use margin instead of flex and padding
   },
@@ -106,6 +111,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     alignSelf: 'center',
   },
+
+  // Input section styles
   whiteBox: {
     backgroundColor: '#FFFFFF',
     padding: 20,
@@ -134,6 +141,8 @@ const styles = StyleSheet.create({
     color: '#757083',
     paddingLeft: 15,
   },
+
+  // Color picker styles
   colorPickerText: {
     fontSize: 16,
     fontWeight: '300',
@@ -165,6 +174,8 @@ const styles = StyleSheet.create({
     height: 32, // Smaller to account for padding in selected state
     borderRadius: 16, // Half of width/height
   },
+
+  // Button styles
   button: {
     backgroundColor: '#757083',
     padding: 15,
