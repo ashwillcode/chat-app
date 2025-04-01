@@ -15,6 +15,7 @@ import { useState, useRef, useEffect } from 'react';
 import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Available reactions for messages
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
@@ -33,9 +34,10 @@ const AUTO_REPLIES = [
  * Chat Screen Component
  * @param {object} route - Contains route params including name, userID, and backgroundColor
  * @param {object} db - Firestore database instance
+ * @param {boolean} isConnected - Indicates whether the device is connected to the internet
  * @returns {React.Component} A React component that renders the chat interface
  */
-const Chat = ({ route, db }) => {
+const Chat = ({ route, db, isConnected }) => {
   // Extract user information and preferences from route params
   const { backgroundColor, name: userName, userID } = route.params;
   
@@ -60,6 +62,24 @@ const Chat = ({ route, db }) => {
   const dot3Opacity = useRef(new Animated.Value(0.3)).current;
   const flatListRef = useRef(null);
 
+  // Load cached messages when offline
+  useEffect(() => {
+    const loadCachedMessages = async () => {
+      try {
+        const cachedMessages = await AsyncStorage.getItem('messages');
+        if (cachedMessages) {
+          setMessages(JSON.parse(cachedMessages));
+        }
+      } catch (error) {
+        console.error('Error loading cached messages:', error);
+      }
+    };
+
+    if (!isConnected) {
+      loadCachedMessages();
+    }
+  }, [isConnected]);
+
   /**
    * Setup effect for initializing chat requirements
    * - Requests media permissions
@@ -76,40 +96,52 @@ const Chat = ({ route, db }) => {
     };
     requestPermissions();
 
-    // Set up Firestore listener
-    const q = query(
-      collection(db, 'messages'),
-      orderBy('createdAt', 'desc')
-    );
+    // Set up Firestore listener when online
+    let unsubscribe;
     
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const newMessages = snapshot.docs.map(doc => {
-        const data = doc.data();
-        const createdAt = data.createdAt ? new Date(data.createdAt.toMillis()) : new Date();
-        
-        return {
-          _id: doc.id,
-          text: data.text,
-          createdAt,
-          user: data.user,
-          image: data.image,
-          reactions: data.reactions || [],
-          status: data.status || 'sent'
-        };
-      });
-      setMessages(newMessages);
+    if (isConnected) {
+      const q = query(
+        collection(db, 'messages'),
+        orderBy('createdAt', 'desc')
+      );
       
-      // Auto-scroll to latest message
-      if (flatListRef.current && newMessages.length > 0) {
-        flatListRef.current.scrollToOffset({ offset: 0, animated: true });
-      }
-    });
+      unsubscribe = onSnapshot(q, async (snapshot) => {
+        const newMessages = snapshot.docs.map(doc => {
+          const data = doc.data();
+          const createdAt = data.createdAt ? new Date(data.createdAt.toMillis()) : new Date();
+          
+          return {
+            _id: doc.id,
+            text: data.text,
+            createdAt,
+            user: data.user,
+            image: data.image,
+            reactions: data.reactions || [],
+            status: data.status || 'sent'
+          };
+        });
+
+        // Save messages to AsyncStorage
+        try {
+          await AsyncStorage.setItem('messages', JSON.stringify(newMessages));
+        } catch (error) {
+          console.error('Error caching messages:', error);
+        }
+        
+        setMessages(newMessages);
+        
+        // Auto-scroll to latest message
+        if (flatListRef.current && newMessages.length > 0) {
+          flatListRef.current.scrollToOffset({ offset: 0, animated: true });
+        }
+      });
+    }
 
     // Cleanup subscription on unmount
     return () => {
       if (unsubscribe) unsubscribe();
     };
-  }, [db]);
+  }, [db, isConnected]);
 
   /**
    * Animation effect for typing indicator
@@ -254,8 +286,45 @@ const Chat = ({ route, db }) => {
         status: 'sent'
       };
 
-      // Add document to Firestore
-      await addDoc(collection(db, 'messages'), newMessage);
+      if (isConnected) {
+        // Add user message to Firestore when online
+        await addDoc(collection(db, 'messages'), newMessage);
+        
+        // Generate chatbot response after a short delay
+        setTimeout(async () => {
+          const botMessage = {
+            text: AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)],
+            createdAt: serverTimestamp(),
+            user: {
+              _id: 'chatbot',
+              name: 'Chat Bot',
+              avatar: null
+            },
+            status: 'sent'
+          };
+          
+          // Add bot message to Firestore
+          await addDoc(collection(db, 'messages'), botMessage);
+        }, 1000);
+      } else {
+        // Handle offline message
+        const offlineMessage = {
+          ...newMessage,
+          _id: Date.now().toString(),
+          createdAt: new Date(),
+          status: 'pending'
+        };
+
+        const updatedMessages = [offlineMessage, ...messages];
+        setMessages(updatedMessages);
+        
+        // Save to AsyncStorage
+        try {
+          await AsyncStorage.setItem('messages', JSON.stringify(updatedMessages));
+        } catch (error) {
+          console.error('Error saving offline message:', error);
+        }
+      }
       
       setInputText('');
       setIsTyping(false);
@@ -440,8 +509,15 @@ const Chat = ({ route, db }) => {
           }}
         />
 
+        {/* Connection Status Indicator */}
+        {!isConnected && (
+          <View style={styles.offlineIndicator}>
+            <Text style={styles.offlineText}>Offline Mode</Text>
+          </View>
+        )}
+
         {/* Typing Indicator */}
-        {isTyping && (
+        {isTyping && isConnected && (
           <View style={[styles.typingContainer]}>
             <View style={styles.typingDotsWrapper}>
               <Animated.View style={[styles.typingDot, { opacity: dot1Opacity }]} />
@@ -451,34 +527,36 @@ const Chat = ({ route, db }) => {
           </View>
         )}
 
-        {/* Input Section */}
-        <View style={styles.inputContainer}>
-          <TouchableOpacity
-            style={styles.attachButton}
-            onPress={pickImage}
-          >
-            <FontAwesome name="image" size={24} color="#007AFF" />
-          </TouchableOpacity>
-          <TextInput
-            style={styles.input}
-            value={inputText}
-            onChangeText={handleTyping}
-            placeholder="Type a message..."
-            placeholderTextColor="#999"
-            multiline
-          />
-          <TouchableOpacity
-            style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
-            onPress={onSend}
-            disabled={!inputText.trim()}
-          >
-            <FontAwesome 
-              name="send" 
-              size={24} 
-              color={inputText.trim() ? "#007AFF" : "#666"} 
+        {/* Input Section - Only show when online */}
+        {isConnected && (
+          <View style={styles.inputContainer}>
+            <TouchableOpacity
+              style={styles.attachButton}
+              onPress={pickImage}
+            >
+              <FontAwesome name="image" size={24} color="#007AFF" />
+            </TouchableOpacity>
+            <TextInput
+              style={styles.input}
+              value={inputText}
+              onChangeText={handleTyping}
+              placeholder="Type a message..."
+              placeholderTextColor="#999"
+              multiline
             />
-          </TouchableOpacity>
-        </View>
+            <TouchableOpacity
+              style={[styles.sendButton, !inputText.trim() && styles.sendButtonDisabled]}
+              onPress={onSend}
+              disabled={!inputText.trim()}
+            >
+              <FontAwesome 
+                name="send" 
+                size={24} 
+                color={inputText.trim() ? "#007AFF" : "#666"} 
+              />
+            </TouchableOpacity>
+          </View>
+        )}
       </KeyboardAvoidingView>
 
       {/* Reactions Modal */}
@@ -724,6 +802,20 @@ const styles = StyleSheet.create({
     borderRadius: 5,
     backgroundColor: '#424242',
     marginHorizontal: 3,
+  },
+
+  // Offline indicator styles
+  offlineIndicator: {
+    backgroundColor: '#FF3B30',
+    paddingVertical: 15,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  offlineText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });
 

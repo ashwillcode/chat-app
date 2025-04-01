@@ -13,8 +13,19 @@ import { StyleSheet, View } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
-import { getAuth } from 'firebase/auth';
+import { getFirestore, disableNetwork, enableNetwork } from 'firebase/firestore';
+import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { useNetInfo } from '@react-native-community/netinfo';
+import { useEffect } from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import {
+  FIREBASE_API_KEY,
+  FIREBASE_AUTH_DOMAIN,
+  FIREBASE_PROJECT_ID,
+  FIREBASE_STORAGE_BUCKET,
+  FIREBASE_MESSAGING_SENDER_ID,
+  FIREBASE_APP_ID,
+} from '@env';
 
 // Import screen components
 import Start from './components/Start';
@@ -22,18 +33,20 @@ import Chat from './components/Chat';
 
 // Firebase configuration
 const firebaseConfig = {
-  apiKey: process.env.FIREBASE_API_KEY,
-  authDomain: process.env.FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.FIREBASE_PROJECT_ID,
-  storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.FIREBASE_APP_ID
+  apiKey: FIREBASE_API_KEY,
+  authDomain: FIREBASE_AUTH_DOMAIN,
+  projectId: FIREBASE_PROJECT_ID,
+  storageBucket: FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: FIREBASE_MESSAGING_SENDER_ID,
+  appId: FIREBASE_APP_ID
 };
 
 // Initialize Firebase services
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app);
+const auth = initializeAuth(app, {
+  persistence: getReactNativePersistence(AsyncStorage)
+});
 
 // Create the navigation stack
 const Stack = createNativeStackNavigator();
@@ -45,6 +58,31 @@ const Stack = createNativeStackNavigator();
  * @returns {React.Component} The root component of the application
  */
 export default function App() {
+  // Get network connection status
+  const connectionStatus = useNetInfo();
+
+  // Handle network status changes
+  useEffect(() => {
+    if (connectionStatus.isConnected === false) {
+      console.log('Lost connection');
+      disableNetwork(db);
+    } else if (connectionStatus.isConnected === true) {
+      console.log('Connected');
+      enableNetwork(db);
+    }
+  }, [connectionStatus.isConnected]);
+
+  // Create a wrapper component for Chat inside the App component
+  const ChatWrapper = ({ route, navigation }) => (
+    <Chat
+      route={route}
+      navigation={navigation}
+      db={db}
+      auth={auth}
+      isConnected={connectionStatus.isConnected}
+    />
+  );
+
   return (
     <NavigationContainer>
       {/* Configure the navigation stack */}
@@ -61,7 +99,7 @@ export default function App() {
         {/* Chat Screen - Main chat interface with Firestore integration */}
         <Stack.Screen 
           name="Chat"
-          component={(props) => <Chat {...props} db={db} />}
+          component={ChatWrapper}
           options={({ route }) => ({
             title: route.params?.name || 'Chat',
             headerStyle: {

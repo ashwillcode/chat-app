@@ -46,3 +46,7 @@ yarn-error.*
 *.swp
 *.swo
 *~
+
+# IDE
+.idea/
+.vscode/
