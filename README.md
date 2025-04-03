@@ -13,7 +13,7 @@ A real-time chat application built with Expo, React Native, and Firebase.
   - Persistent user preferences
 - Message features:
   - Text messages with timestamps
-  - Image sharing (camera and gallery) (Note: Currently images are not persistently stored)
+  - Image sharing (camera and gallery with Firebase Storage)
   - Location sharing
   - Message reactions (👍, ❤️, 😂, 😮, 😢, 😡)
   - Message status indicators
@@ -32,7 +32,7 @@ A real-time chat application built with Expo, React Native, and Firebase.
 
 This app uses a custom chat implementation with:
 - Direct Firestore integration for real-time messaging
-- Local image handling (Firebase Storage integration pending)
+- Firebase Storage for persistent image storage
 - AsyncStorage for local data persistence
 - Custom message bubble UI with reactions
 - Optimized performance with FlatList
@@ -63,7 +63,7 @@ npm install
    - Create a new Firebase project at [Firebase Console](https://console.firebase.google.com)
    - Enable Anonymous Authentication in Firebase Authentication
    - Create a Firestore database
-   - Enable Firebase Storage
+   - Set up Firebase Storage
    - Create a `.env` file in the root directory with your Firebase configuration:
      ```
      FIREBASE_API_KEY=your_api_key
@@ -99,9 +99,10 @@ npx expo start
 2. **Sharing Media**:
    - Tap the plus (+) icon beside the input field
    - Choose from:
-     - "Choose From Library" - send existing photos
+     - "Choose From Library" - send photos from your gallery
      - "Take Picture" - capture and send new photos
      - "Share Location" - send your current location
+   - Images are automatically uploaded and stored in Firebase Storage
 
 3. **Message Interactions**:
    - Long press any message to:
