@@ -4,23 +4,39 @@ A real-time chat application built with Expo, React Native, and Firebase.
 
 ## Features
 
-- Anonymous user authentication via Firebase
+- Persistent anonymous authentication (maintains user identity between sessions)
 - Real-time messaging with Firestore
-- User customization with name and background color selection
-- Message timestamps and delivery status
-- Modern, clean UI design
-- Image sharing capabilities
-- Message reactions
-- Pull-to-refresh functionality
+- Offline message caching and synchronization
+- User customization:
+  - Custom display name
+  - Background color selection
+  - Persistent user preferences
+- Message features:
+  - Text messages with timestamps
+  - Image sharing (camera and gallery)
+  - Location sharing
+  - Message reactions (👍, ❤️, 😂, 😮, 😢, 😡)
+  - Message status indicators
+  - Copy message text
+  - Auto-replies from chatbot
+- Modern UI features:
+  - Pull-to-refresh functionality
+  - Typing indicators
+  - Date headers (Today/Yesterday/Date)
+  - Online/Offline status indication
+  - Keyboard handling
+  - Message bubble styling
+- Cross-platform support (iOS and Android)
 
 ## Implementation Note
 
-This app uses a custom chat implementation instead of the popular `react-native-gifted-chat` library. This decision was made to:
-- Maintain full control over the UI/UX
-- Avoid compatibility issues with newer React Native versions
-- Implement custom features like message reactions and typing indicators
-- Provide better performance with direct Firestore integration
-- Enable easier customization of message bubbles and animations
+This app uses a custom chat implementation with:
+- Direct Firestore integration for real-time messaging
+- Firebase Storage for image handling
+- AsyncStorage for local data persistence
+- Custom message bubble UI with reactions
+- Optimized performance with FlatList
+- Proper keyboard handling across platforms
 
 ## Prerequisites
 
@@ -47,6 +63,7 @@ npm install
    - Create a new Firebase project at [Firebase Console](https://console.firebase.google.com)
    - Enable Anonymous Authentication in Firebase Authentication
    - Create a Firestore database
+   - Enable Firebase Storage
    - Create a `.env` file in the root directory with your Firebase configuration:
      ```
      FIREBASE_API_KEY=your_api_key
@@ -56,7 +73,6 @@ npm install
      FIREBASE_MESSAGING_SENDER_ID=your_messaging_sender_id
      FIREBASE_APP_ID=your_app_id
      ```
-   - Never commit the `.env` file to version control
 
 4. Start the development server:
 ```bash
@@ -67,68 +83,70 @@ npx expo start
 
 ```
 chat-app/
-├── App.js                 # Main application component with Firebase and navigation setup
+├── App.js                 # Main application component with Firebase setup
 ├── components/           
-│   ├── Start.js          # Welcome screen with user authentication
-│   └── Chat.js           # Real-time chat interface with Firestore integration
-├── assets/               # Images and other static assets
-└── package.json          # Project dependencies and scripts
+│   ├── Start.js          # Welcome screen with auth and preferences
+│   ├── Chat.js           # Main chat interface
+│   ├── CustomActions.js   # Custom action buttons (image/location)
+│   └── CustomMapView.js   # Map view for location messages
+├── assets/               # Static assets
+└── package.json          # Project dependencies
 ```
 
-## Firebase Integration
-
-### Authentication
-- Anonymous authentication using Firebase Auth
-- User ID and display name management
-- Clean session handling
-
-### Firestore Database
-- Real-time message synchronization
-- Message structure:
-  ```javascript
-  {
-    text: string,
-    createdAt: timestamp,
-    user: {
-      _id: string,
-      name: string,
-      avatar: string | null
-    },
-    status: string,
-    image?: string,
-    reactions?: Array
-  }
-  ```
-
-## Features Implementation
+## Key Components
 
 ### Start Screen (`Start.js`)
-- User name input
-- Background color selection
-- Anonymous authentication
-- Navigation to chat with user context
+- Handles user authentication
+- Manages user preferences
+- Persists user data with AsyncStorage
+- Provides color theme selection
 
 ### Chat Screen (`Chat.js`)
-- Real-time message updates using Firestore listeners
-- Message sending with proper timestamps
-- Image sharing functionality
+- Real-time message synchronization
+- Message rendering and styling
+- Offline support
+- Image and location sharing
 - Message reactions
 - Typing indicators
-- Pull-to-refresh capability
-- Clean listener cleanup on unmount
+- Auto-scroll behavior
+- Chatbot auto-replies
 
-## Development
+### Custom Actions (`CustomActions.js`)
+- Image picker integration
+- Camera access
+- Location sharing
+- Firebase Storage upload handling
 
-### Adding New Features
+## Data Structure
 
-1. Create new components in the `components/` directory
-2. Update navigation in `App.js` if adding new screens
-3. Follow the existing component structure and styling patterns
-4. Ensure proper Firebase security rules are in place
+### Messages in Firestore
+```javascript
+{
+  text: string,          // Message content
+  createdAt: timestamp,  // Server timestamp
+  user: {
+    _id: string,        // User identifier
+    name: string,       // Display name
+    avatar: string      // Optional avatar URL
+  },
+  image?: string,       // Optional image URL
+  location?: {          // Optional location data
+    latitude: number,
+    longitude: number
+  },
+  status: string,       // Message status (sent/delivered/read)
+  reactions?: Array     // Optional message reactions
+}
+```
 
-### Firebase Security Rules
+### Local Storage
+- userId: Persistent anonymous user ID
+- userName: User's display name
+- backgroundColor: Selected chat background color
+- messages: Cached messages for offline access
 
-Basic security rules for Firestore:
+## Firebase Security Rules
+
 ```javascript
 rules_version = '2';
 service cloud.firestore {
@@ -139,6 +157,20 @@ service cloud.firestore {
   }
 }
 ```
+
+## Dependencies
+
+Key packages used:
+- expo: ~52.0.42
+- firebase: ^10.3.1
+- @react-navigation/native: ^7.0.18
+- @react-native-async-storage/async-storage: ^1.23.1
+- expo-image-picker: ~16.0.6
+- expo-location: ^18.0.10
+- react-native-maps: ^1.20.1
+- @expo/react-native-action-sheet: ^4.1.1
+
+See package.json for complete list of dependencies.
 
 ## Contributing
 
@@ -151,14 +183,3 @@ service cloud.firestore {
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Dependencies
-
-- expo
-- react-native
-- @react-navigation/native
-- @react-navigation/native-stack
-- firebase (v10.3.1)
-- expo-image-picker
-- react-native-safe-area-context
-- react-native-screens
