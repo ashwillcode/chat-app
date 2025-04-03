@@ -79,6 +79,54 @@ npm install
 npx expo start
 ```
 
+## Usage Guide
+
+### Getting Started
+1. Launch the app
+2. On the Start screen:
+   - Enter your name in the text field
+   - Select a background color from the four color options
+   - Tap "Start Chatting" to enter the chat
+
+### Basic Chat Functions
+1. **Sending Messages**:
+   - Type your message in the bottom input field
+   - Tap the send button (arrow icon) to send
+   - Your messages appear on the right in green
+   - Other users' messages appear on the left in white
+   - Chatbot will automatically reply to your messages
+
+2. **Sharing Media**:
+   - Tap the plus (+) icon beside the input field
+   - Choose from:
+     - "Choose From Library" - send existing photos
+     - "Take Picture" - capture and send new photos
+     - "Share Location" - send your current location
+
+3. **Message Interactions**:
+   - Long press any message to:
+     - Add reactions (👍, ❤️, 😂, 😮, 😢, 😡)
+     - Copy message text
+   - Tap on shared locations to view in map
+
+### Additional Features
+- **Offline Mode**:
+  - Continue using the app without internet
+  - Messages are saved locally
+  - "Offline Mode" indicator appears when disconnected
+  - Messages sync automatically when connection returns
+
+- **Navigation**:
+  - Pull down to refresh message list
+  - Messages auto-scroll to bottom when sending
+  - Date headers show Today/Yesterday/Date
+  - Typing indicators show when others are typing
+
+- **Message Status**:
+  - Check mark shows successful message delivery
+  - Timestamps show in 12-hour format
+  - Your name and preferences persist between sessions
+
 ## Project Structure
 
 ```
