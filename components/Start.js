@@ -8,10 +8,11 @@
  * 4. Navigation to the chat screen with user context
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TextInput, TouchableOpacity, KeyboardAvoidingView, Platform, ImageBackground, Alert } from 'react-native';
 import Icon from '@expo/vector-icons/FontAwesome';
 import { getAuth, signInAnonymously } from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 /**
  * Start Screen Component
@@ -27,6 +28,29 @@ const Start = ({ navigation }) => {
   // Available background color options for chat screen
   const colors = ['#090C08', '#474056', '#8A95A5', '#B9C6AE'];
 
+  useEffect(() => {
+    // Check for existing user ID
+    const checkExistingUser = async () => {
+      try {
+        const savedUserId = await AsyncStorage.getItem('userId');
+        const savedName = await AsyncStorage.getItem('userName');
+        const savedColor = await AsyncStorage.getItem('backgroundColor');
+        
+        if (savedUserId && savedName) {
+          navigation.navigate('Chat', {
+            userID: savedUserId,
+            name: savedName,
+            backgroundColor: savedColor || selectedColor
+          });
+        }
+      } catch (error) {
+        console.error("Error checking existing user:", error);
+      }
+    };
+    
+    checkExistingUser();
+  }, []);
+
   /**
    * Handles user authentication and navigation to chat
    * 1. Attempts anonymous sign-in with Firebase
@@ -36,13 +60,22 @@ const Start = ({ navigation }) => {
   const handleStartChat = async () => {
     setIsLoading(true);
     try {
-      // Authenticate anonymously with Firebase
-      const auth = getAuth();
-      const userCredential = await signInAnonymously(auth);
+      let userId = await AsyncStorage.getItem('userId');
       
-      // Navigate to Chat screen with user context
+      if (!userId) {
+        // Only authenticate anonymously if we don't have a saved user ID
+        const auth = getAuth();
+        const userCredential = await signInAnonymously(auth);
+        userId = userCredential.user.uid;
+        
+        // Save the user ID for future sessions
+        await AsyncStorage.setItem('userId', userId);
+        await AsyncStorage.setItem('userName', name);
+        await AsyncStorage.setItem('backgroundColor', selectedColor);
+      }
+      
       navigation.navigate('Chat', { 
-        userID: userCredential.user.uid,
+        userID: userId,
         name: name,
         backgroundColor: selectedColor
       });

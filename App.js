@@ -18,6 +18,7 @@ import { initializeAuth, getReactNativePersistence } from 'firebase/auth';
 import { useNetInfo } from '@react-native-community/netinfo';
 import { useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getStorage } from 'firebase/storage';
 import {
   FIREBASE_API_KEY,
   FIREBASE_AUTH_DOMAIN,
@@ -26,6 +27,7 @@ import {
   FIREBASE_MESSAGING_SENDER_ID,
   FIREBASE_APP_ID,
 } from '@env';
+import { ActionSheetProvider } from '@expo/react-native-action-sheet';
 
 // Import screen components
 import Start from './components/Start';
@@ -44,9 +46,7 @@ const firebaseConfig = {
 // Initialize Firebase services
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = initializeAuth(app, {
-  persistence: getReactNativePersistence(AsyncStorage)
-});
+const storage = getStorage(app);
 
 // Create the navigation stack
 const Stack = createNativeStackNavigator();
@@ -57,7 +57,7 @@ const Stack = createNativeStackNavigator();
  * Configures the navigation stack with Start and Chat screens
  * @returns {React.Component} The root component of the application
  */
-export default function App() {
+function App() {
   // Get network connection status
   const connectionStatus = useNetInfo();
 
@@ -73,49 +73,51 @@ export default function App() {
   }, [connectionStatus.isConnected]);
 
   // Create a wrapper component for Chat inside the App component
-  const ChatWrapper = ({ route, navigation }) => (
-    <Chat
-      route={route}
-      navigation={navigation}
-      db={db}
-      auth={auth}
-      isConnected={connectionStatus.isConnected}
-    />
-  );
+  const ChatWrapper = ({ route, navigation }) => {
+    return (
+      <Chat
+        route={route}
+        navigation={navigation}
+        db={db}
+        storage={storage}
+        isConnected={connectionStatus.isConnected}
+      />
+    );
+  };
 
   return (
-    <NavigationContainer>
-      {/* Configure the navigation stack */}
-      <Stack.Navigator
-        initialRouteName="Start"
-      >
-        {/* Start Screen - Initial screen for user setup and authentication */}
-        <Stack.Screen 
-          name="Start" 
-          component={Start}
-          options={{ headerShown: false }}
-        />
-
-        {/* Chat Screen - Main chat interface with Firestore integration */}
-        <Stack.Screen 
-          name="Chat"
-          component={ChatWrapper}
-          options={({ route }) => ({
-            title: route.params?.name || 'Chat',
-            headerStyle: {
-              backgroundColor: '#757083',
-            },
-            headerTintColor: '#fff',
-            headerTitleStyle: {
-              fontWeight: '600',
-            },
-          })}
-        />
-      </Stack.Navigator>
-      <StatusBar style="auto" />
-    </NavigationContainer>
+    <ActionSheetProvider>
+      <NavigationContainer>
+        <Stack.Navigator
+          initialRouteName="Start"
+        >
+          <Stack.Screen 
+            name="Start" 
+            component={Start}
+            options={{ headerShown: false }}
+          />
+          <Stack.Screen 
+            name="Chat"
+            component={ChatWrapper}
+            options={({ route }) => ({
+              title: route.params?.name || 'Chat',
+              headerStyle: {
+                backgroundColor: '#757083',
+              },
+              headerTintColor: '#fff',
+              headerTitleStyle: {
+                fontWeight: '600',
+              },
+            })}
+          />
+        </Stack.Navigator>
+        <StatusBar style="auto" />
+      </NavigationContainer>
+    </ActionSheetProvider>
   );
 }
+
+export default App;
 
 // Styles for the root app component
 const styles = StyleSheet.create({

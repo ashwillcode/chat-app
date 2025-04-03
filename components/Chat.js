@@ -16,6 +16,8 @@ import { FontAwesome } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { collection, addDoc, onSnapshot, query, orderBy, serverTimestamp } from 'firebase/firestore';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import CustomActions from './CustomActions';
+import CustomMapView from './CustomMapView';
 
 // Available reactions for messages
 const REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '😡'];
@@ -34,10 +36,11 @@ const AUTO_REPLIES = [
  * Chat Screen Component
  * @param {object} route - Contains route params including name, userID, and backgroundColor
  * @param {object} db - Firestore database instance
+ * @param {object} storage - Firebase storage instance
  * @param {boolean} isConnected - Indicates whether the device is connected to the internet
  * @returns {React.Component} A React component that renders the chat interface
  */
-const Chat = ({ route, db, isConnected }) => {
+const Chat = ({ route, db, storage, isConnected }) => {
   // Extract user information and preferences from route params
   const { backgroundColor, name: userName, userID } = route.params;
   
@@ -66,9 +69,10 @@ const Chat = ({ route, db, isConnected }) => {
   useEffect(() => {
     const loadCachedMessages = async () => {
       try {
-        const cachedMessages = await AsyncStorage.getItem('messages');
-        if (cachedMessages) {
-          setMessages(JSON.parse(cachedMessages));
+        const cached = await AsyncStorage.getItem('messages');
+        if (cached) {
+          const { messages: cachedMessages, currentUser } = JSON.parse(cached);
+          setMessages(cachedMessages);
         }
       } catch (error) {
         console.error('Error loading cached messages:', error);
@@ -105,35 +109,28 @@ const Chat = ({ route, db, isConnected }) => {
         orderBy('createdAt', 'desc')
       );
       
-      unsubscribe = onSnapshot(q, async (snapshot) => {
+      unsubscribe = onSnapshot(q, (snapshot) => {
         const newMessages = snapshot.docs.map(doc => {
           const data = doc.data();
-          const createdAt = data.createdAt ? new Date(data.createdAt.toMillis()) : new Date();
-          
+          console.log('Loaded message data:', data);
+          console.log('User ID from message:', data.user?._id);
+          console.log('Current user ID:', userID);
           return {
             _id: doc.id,
-            text: data.text,
-            createdAt,
-            user: data.user,
-            image: data.image,
-            reactions: data.reactions || [],
+            text: data.text || '',
+            createdAt: data.createdAt ? new Date(data.createdAt.toMillis()) : new Date(),
+            user: {
+              _id: data.user?._id || data.user?.id || 'unknown',
+              name: data.user?.name || 'Unknown',
+              avatar: data.user?.avatar || null
+            },
+            image: data.image || null,
+            location: data.location || null,
             status: data.status || 'sent'
           };
         });
-
-        // Save messages to AsyncStorage
-        try {
-          await AsyncStorage.setItem('messages', JSON.stringify(newMessages));
-        } catch (error) {
-          console.error('Error caching messages:', error);
-        }
         
         setMessages(newMessages);
-        
-        // Auto-scroll to latest message
-        if (flatListRef.current && newMessages.length > 0) {
-          flatListRef.current.scrollToOffset({ offset: 0, animated: true });
-        }
       });
     }
 
@@ -271,63 +268,74 @@ const Chat = ({ route, db, isConnected }) => {
    * Handle sending messages
    * Adds new message to Firestore with proper formatting
    */
-  const onSend = async () => {
-    if (!inputText.trim()) return;
-
+  const onSend = async (messageData = {}) => {
     try {
-      const newMessage = {
-        text: inputText.trim(),
-        createdAt: serverTimestamp(),
-        user: {
-          _id: user._id,
-          name: user.name,
-          avatar: user.avatar
-        },
-        status: 'sent'
+      let newMessage;
+      
+      // Create a consistent user object structure
+      const currentUser = {
+        _id: userID,  // Just use _id consistently
+        name: userName,
+        avatar: null
       };
 
+      if (messageData.location) {
+        newMessage = {
+          location: messageData.location,
+          createdAt: serverTimestamp(),
+          user: currentUser,
+          status: 'sent'
+        };
+      } else if (messageData.image) {
+        newMessage = {
+          image: messageData.image,
+          createdAt: serverTimestamp(),
+          user: currentUser,
+          status: 'sent'
+        };
+      } else {
+        if (!inputText.trim()) return;
+        newMessage = {
+          text: inputText.trim(),
+          createdAt: serverTimestamp(),
+          user: currentUser,
+          status: 'sent'
+        };
+      }
+
       if (isConnected) {
-        // Add user message to Firestore when online
+        console.log('Saving message with user:', currentUser);
+        console.log('Full message being saved:', newMessage);
         await addDoc(collection(db, 'messages'), newMessage);
         
-        // Generate chatbot response after a short delay
-        setTimeout(async () => {
-          const botMessage = {
-            text: AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)],
-            createdAt: serverTimestamp(),
-            user: {
-              _id: 'chatbot',
-              name: 'Chat Bot',
-              avatar: null
-            },
-            status: 'sent'
-          };
-          
-          // Add bot message to Firestore
-          await addDoc(collection(db, 'messages'), botMessage);
-        }, 1000);
+        if (!messageData.location && !messageData.image) {
+          setTimeout(async () => {
+            const botMessage = {
+              text: AUTO_REPLIES[Math.floor(Math.random() * AUTO_REPLIES.length)],
+              createdAt: serverTimestamp(),
+              user: {
+                _id: 'chatbot',  // Consistent bot ID
+                name: 'Chat Bot',
+                avatar: null
+              },
+              status: 'sent'
+            };
+            await addDoc(collection(db, 'messages'), botMessage);
+          }, 1000);
+        }
       } else {
-        // Handle offline message
         const offlineMessage = {
           ...newMessage,
           _id: Date.now().toString(),
-          createdAt: new Date(),
-          status: 'pending'
+          createdAt: new Date()
         };
-
-        const updatedMessages = [offlineMessage, ...messages];
-        setMessages(updatedMessages);
-        
-        // Save to AsyncStorage
-        try {
-          await AsyncStorage.setItem('messages', JSON.stringify(updatedMessages));
-        } catch (error) {
-          console.error('Error saving offline message:', error);
-        }
+        setMessages(previousMessages => [offlineMessage, ...previousMessages]);
       }
       
-      setInputText('');
-      setIsTyping(false);
+      if (!messageData.location && !messageData.image) {
+        setInputText('');
+        setIsTyping(false);
+      }
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message. Please try again.');
@@ -395,17 +403,15 @@ const Chat = ({ route, db, isConnected }) => {
     if (!isUser) return null;
 
     const statusConfig = {
-      sent: { name: 'check', color: '#8E8E93' },
-      delivered: { name: 'check-circle', color: '#007AFF' },
+      sent: { name: 'check-circle', color: '#4CD964' },
+      delivered: { name: 'check-circle', color: '#4CD964' },
       read: { name: 'check-circle', color: '#4CD964' }
     };
 
     const config = statusConfig[status] || statusConfig.sent;
 
     return (
-      <View style={styles.messageStatusContainer}>
-        <FontAwesome name={config.name} size={12} color={config.color} />
-      </View>
+      <FontAwesome name={config.name} size={14} color={config.color} />
     );
   };
 
@@ -432,7 +438,7 @@ const Chat = ({ route, db, isConnected }) => {
   // Render individual message
   const renderMessage = ({ item, index }) => {
     const isSystem = item.system;
-    const isUser = !isSystem && item.user && item.user._id === user._id;
+    const isUser = item.user?._id === userID || item.user?.id === userID;
     const showDateHeader = index === messages.length - 1 || 
       formatDate(item.createdAt) !== formatDate(messages[index + 1]?.createdAt);
 
@@ -459,11 +465,19 @@ const Chat = ({ route, db, isConnected }) => {
           </View>
         )}
         <View style={[styles.messageContainer, isUser ? styles.userMessage : styles.otherMessage]}>
-          {!isUser && renderAvatar()}
+          {!isUser && (
+            <View style={styles.avatarContainer}>
+              <View style={styles.defaultAvatar}>
+                <FontAwesome name="user" size={20} color="#FFFFFF" />
+              </View>
+            </View>
+          )}
           <View style={[styles.messageBubble, isUser ? styles.userBubble : styles.otherBubble]}>
-            {!isUser && <Text style={styles.messageAuthor}>Chat Bot</Text>}
+            {!isUser && <Text style={styles.messageAuthor}>{item.user?.name || 'Unknown'}</Text>}
             {item.image ? (
               <Image source={{ uri: item.image }} style={styles.messageImage} />
+            ) : item.location ? (
+              <CustomMapView location={item.location} />
             ) : (
               <Text style={[styles.messageText, isUser ? styles.userMessageText : styles.otherMessageText]}>
                 {item.text}
@@ -471,16 +485,31 @@ const Chat = ({ route, db, isConnected }) => {
             )}
             {renderReactions(item)}
             <View style={styles.messageFooter}>
-              <Text style={styles.messageTime}>
+              {isUser && renderMessageStatus(item.status, isUser)}
+              <Text style={[styles.messageTime, isUser ? styles.userMessageTime : styles.otherMessageTime]}>
                 {new Date(item.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </Text>
-              {renderMessageStatus(item.status, isUser)}
             </View>
           </View>
-          {isUser && renderAvatar()}
+          {isUser && (
+            <View style={styles.avatarContainer}>
+              <View style={styles.defaultAvatar}>
+                <FontAwesome name="user" size={20} color="#FFFFFF" />
+              </View>
+            </View>
+          )}
         </View>
       </View>
     );
+  };
+
+  // Render custom view for location messages
+  const renderCustomView = (props) => {
+    const { currentMessage } = props;
+    if (currentMessage.location) {
+      return <CustomMapView location={currentMessage.location} />;
+    }
+    return null;
   };
 
   // Main render
@@ -530,12 +559,11 @@ const Chat = ({ route, db, isConnected }) => {
         {/* Input Section - Only show when online */}
         {isConnected && (
           <View style={styles.inputContainer}>
-            <TouchableOpacity
-              style={styles.attachButton}
-              onPress={pickImage}
-            >
-              <FontAwesome name="image" size={24} color="#007AFF" />
-            </TouchableOpacity>
+            <CustomActions
+              onSend={onSend}
+              user={user}
+              storage={storage}
+            />
             <TextInput
               style={styles.input}
               value={inputText}
@@ -605,26 +633,17 @@ const styles = StyleSheet.create({
   messageContainer: {
     flexDirection: 'row',
     marginVertical: 5,
+    paddingHorizontal: 10,
     width: '100%',
     alignItems: 'flex-end',
-    paddingHorizontal: 10,
   },
   userMessage: {
+    flexDirection: 'row',
     justifyContent: 'flex-end',
   },
   otherMessage: {
+    flexDirection: 'row',
     justifyContent: 'flex-start',
-  },
-
-  // System message styles
-  systemMessageContainer: {
-    alignItems: 'center',
-    marginVertical: 10,
-  },
-  systemMessageText: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontStyle: 'italic',
   },
 
   // Message bubble styles
@@ -632,14 +651,13 @@ const styles = StyleSheet.create({
     maxWidth: '70%',
     padding: 10,
     borderRadius: 20,
-    marginHorizontal: 4,
   },
   userBubble: {
-    backgroundColor: '#FFF9C4',
+    backgroundColor: '#DCF8C6',
     borderBottomRightRadius: 5,
   },
   otherBubble: {
-    backgroundColor: '#E3F2FD',
+    backgroundColor: '#FFFFFF',
     borderBottomLeftRadius: 5,
   },
 
@@ -655,22 +673,22 @@ const styles = StyleSheet.create({
   },
   messageAuthor: {
     fontSize: 12,
-    color: '#424242',
+    color: '#666666',
     marginBottom: 4,
   },
 
   // Avatar styles
   avatarContainer: {
-    width: 40,
-    height: 40,
-    marginHorizontal: 4,
-    borderRadius: 20,
+    width: 34,
+    height: 34,
+    marginHorizontal: 8,
+    borderRadius: 17,
     overflow: 'hidden',
   },
   defaultAvatar: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#666666',
+    backgroundColor: '#757083',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -693,7 +711,7 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     paddingHorizontal: 15,
     paddingVertical: 10,
-    marginRight: 10,
+    marginHorizontal: 5,
     fontSize: 16,
   },
   sendButton: {
@@ -701,6 +719,8 @@ const styles = StyleSheet.create({
     height: 40,
     justifyContent: 'center',
     alignItems: 'center',
+    marginLeft: 5,
+    marginRight: 8,
   },
   sendButtonDisabled: {
     opacity: 0.5,
@@ -742,10 +762,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'flex-end',
     marginTop: 4,
+    gap: 4,
   },
   messageTime: {
     fontSize: 10,
-    color: '#424242',
+    marginLeft: 4,
+  },
+  userMessageTime: {
+    color: 'rgba(0, 0, 0, 0.6)',
+  },
+  otherMessageTime: {
+    color: 'rgba(0, 0, 0, 0.6)',
   },
   messageStatusContainer: {
     marginLeft: 4,

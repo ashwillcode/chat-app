@@ -50,3 +50,6 @@ yarn-error.*
 # IDE
 .idea/
 .vscode/
+
+# Google Cloud key file
+google-cloud-key.json
